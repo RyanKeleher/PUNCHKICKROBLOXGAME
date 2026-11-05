@@ -10,11 +10,13 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local GuiService = game:GetService("GuiService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GameConfig = require(Shared.Config.GameConfig)
 local Moves = require(Shared.Config.Moves)
 local Zones = require(Shared.Config.Zones)
+local Animations = require(Shared.Config.Animations)
 local Progression = require(Shared.Progression)
 local Format = require(Shared.Util.Format)
 local Signal = require(Shared.Util.Signal)
@@ -43,6 +45,7 @@ function HUD.new()
 	self.MoveSlotPressed = Signal.new() -- (slotIndex 0..4)
 	self.PunchHold = Signal.new() -- (holding: boolean)
 	self.MenuPressed = Signal.new()
+	self.EmotePressed = Signal.new() -- (emoteId)
 	self.cooldowns = {} :: { [number]: { finish: number, duration: number } }
 	self.isTouch = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
@@ -56,6 +59,7 @@ function HUD.new()
 	self:_buildStats()
 	self:_buildMoveBar()
 	self:_buildTopRight()
+	self:_buildEmotes()
 	self:_buildCenter()
 	if UserInputService.TouchEnabled then
 		self:_buildTouchButtons()
@@ -241,6 +245,69 @@ function HUD:_buildTopRight()
 	layout.Parent = feed
 	self.feed = feed
 	self.feedOrder = 0
+end
+
+function HUD:_buildEmotes()
+	local toggle = UIKit.button(self.gui, "EMOTE", {
+		Name = "EmoteButton",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -132, 0, 12),
+		Size = UDim2.fromOffset(100, 46),
+		BackgroundColor3 = Color3.fromRGB(120, 80, 200),
+		TextSize = 18,
+	})
+	UIKit.stroke(toggle, Color3.fromRGB(0, 0, 0), 2)
+	UIKit.autoScale(toggle, Vector2.new(1000, 700), 0.7, 1.1)
+
+	local panel = UIKit.frame(self.gui, {
+		Name = "EmotePanel",
+		AnchorPoint = Vector2.new(1, 0),
+		Position = UDim2.new(1, -132, 0, 66),
+		Size = UDim2.fromOffset(150, #Animations.Emotes * 44 + 10),
+		BackgroundTransparency = 0.15,
+		Visible = false,
+	})
+	UIKit.corner(panel, 10)
+	UIKit.padding(panel, 5)
+	UIKit.autoScale(panel, Vector2.new(1000, 700), 0.7, 1.1)
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 4)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = panel
+
+	local showKeys = UserInputService.KeyboardEnabled
+	local KEY_LABELS = { Five = "5", Six = "6", Seven = "7", Eight = "8", Nine = "9", Zero = "0" }
+	for i, emote in Animations.Emotes do
+		local keyName = ""
+		if emote.key and showKeys then
+			keyName = ` [{KEY_LABELS[emote.key.Name] or emote.key.Name}]`
+		end
+		local b = UIKit.button(panel, emote.name .. keyName, {
+			Size = UDim2.new(1, 0, 0, 40),
+			LayoutOrder = i,
+			TextSize = 15,
+		})
+		b.Activated:Connect(function()
+			panel.Visible = false
+			self.EmotePressed:Fire(emote.id)
+		end)
+	end
+
+	toggle.Activated:Connect(function()
+		self:toggleEmotes()
+	end)
+	self.emotePanel = panel
+end
+
+function HUD:toggleEmotes()
+	local panel = self.emotePanel
+	panel.Visible = not panel.Visible
+	if panel.Visible and UserInputService.GamepadEnabled then
+		local first = panel:FindFirstChildWhichIsA("TextButton")
+		if first then
+			GuiService.SelectedObject = first
+		end
+	end
 end
 
 function HUD:_buildCenter()

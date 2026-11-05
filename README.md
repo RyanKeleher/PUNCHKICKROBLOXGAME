@@ -10,7 +10,7 @@ Everything is **server-authoritative**. The client only says "I used move X faci
 |---|---|---|
 | Combat | Hold-to-punch plus 4 move slots. 8 moves: Punch, Front Kick, Uppercut, Roundhouse (AoE), Dropkick (dash), Ground Pound (AoE), Mega Punch, Cyclone Kick. Server-side hitboxes, cooldowns, knockback | `CombatService`, `Config/Moves` |
 | Ragdoll | Players ragdoll when hit by big moves; dummies ragdoll and fly when knocked out; bodies ragdoll on death | `RagdollService`, `RagdollClient` |
-| Animations | Procedural keyframe poses (no uploaded assets needed). Put your own `animationId` in `Config/Moves` to use real animations | `PoseAnimator` |
+| Animations | Procedural keyframe animation for every attack, a fighting stance that blends in during combat, hit flinches, and 4 emotes (Flex, Taunt, Bow, Victory). Level-ups and PvP KOs celebrate automatically. Optional custom walk/run/idle. Includes an exporter to the Animation Editor | `PoseAnimator`, `AnimationService`, `Config/Animations`, `Dev/AnimationExporter` |
 | Progression | Levels 1–150, XP curve, 2 stat points per level, Power / Agility / Vitality, hit-streak XP bonus | `StatsService`, `Progression` |
 | Rebirth | At level 30+: reset level and stats for +25% XP and coins forever. Cost grows each time | `StatsService`, `Config/GameConfig` |
 | World | 5 floating zones linked by bridges: Starter Gym, Brawl Arena (PvP), Mountain Dojo (Lv 8), Neon Rooftop (Lv 18), Volcano Crater (Lv 30, boss). Level gates are enforced by the server | `ZoneService`, `Config/Zones` |
@@ -73,12 +73,13 @@ The instance name is the file name without the extension.
 | Punch (hold to keep punching) | Left mouse | R2 | PUNCH button |
 | Move slots 1–4 | 1–4 or Q / E / R / F | X / Y / B / R1 | tap the slot on the move bar |
 | Menu | M or MENU button | Select or D-pad Up | MENU button |
+| Emotes | 5 / 6 / 7 / 8, or the EMOTE button | D-pad Down opens the emote panel | EMOTE button |
 
 Attacks go where the camera is looking.
 
 ## Testing checklist
 
-1. **Press Play.** The Output window should show `[ProgressionTests] 8/8 passed`, the `[DevService]` line, and `[PunchKick] Server started`.
+1. **Press Play.** The Output window should show `[ProgressionTests] 9/9 passed`, the `[DevService]` line, and `[PunchKick] Server started`.
 2. **Gym:** punch a bag (5 punches at level 1). You should see damage numbers, sparks, the bag wobbling, then flying off and respawning after 4s. XP and coins go up.
 3. **Streak:** keep hitting quickly. "N HIT STREAK +X% XP" appears from 3 hits.
 4. **Level up:** you get a banner, a burst effect and stat points. Open the menu (M) → Stats → spend points. Max health and walk speed change right away.
@@ -88,7 +89,8 @@ Attacks go where the camera is looking.
 8. **Rebirth:** at level 30 with enough coins, use Menu → Rebirth. You go back to level 1, gain a ★ on your tag, and keep your moves.
 9. **PvP (Test → Clients and Servers → 2 players):** both walk into the Brawl Arena. Hits deal damage, kicks ragdoll the other player and they stand back up, a KO shows in the feed and pays coins. Outside the arena you can't hurt each other.
 10. **Saving:** with API access on, earn coins, stop, Play again. The coins should still be there.
-11. **Exploit sanity:** from a client command bar, run `game.ReplicatedStorage.Remotes.Attack:FireServer("megapunch", Vector3.new(0,0,-1))` without owning it. Nothing happens. Spamming `Attack` faster than the cooldown is ignored.
+11. **Animations:** punch a bag and your guard comes up, then drops about 4s after you stop. Press 5–8 for emotes; walking cancels them. In a 2-player test, each player sees the other's attacks, flinches, emotes, and a flex on level-up.
+12. **Exploit sanity:** from a client command bar, run `game.ReplicatedStorage.Remotes.Attack:FireServer("megapunch", Vector3.new(0,0,-1))` without owning it. Nothing happens. Spamming `Attack` faster than the cooldown is ignored.
 
 Dev chat commands (Studio only): `!coins N`, `!level N`, `!xp N`, `!points N`, `!rebirths N`, `!unlockall`, `!reset`.
 
@@ -102,6 +104,31 @@ Dev chat commands (Studio only): `!coins N`, `!level N`, `!xp N`, `!points N`, `
 - **Network budget.** Profile pushes are throttled through `PlayerSync` (at most one every 0.15s per player). Effects are only sent to players within 220 studs.
 - **Performance.** No per-frame server loops: zone checks run every 0.5s, autosaves every 120s. Effects are pooled. Client RenderStepped loops only run while something is animating.
 
+## Animations
+
+All character animation is procedural by default: keyframed joint rotations in `Config/Moves` (attacks) and `Config/Animations` (stance, hit react, emotes). No uploads are needed and it works the moment you press Play.
+
+`PoseAnimator` mixes two layers per character:
+
+1. A **stance** layer: a guard pose that blends in for 4 seconds after you attack or get hit.
+2. An **action** layer: attacks, flinches and emotes, which take over the joints they use and hand them back smoothly.
+
+These layers rotate each joint's `Motor6D.C0`, while Roblox's walk/run animations drive `Motor6D.Transform`, so you can punch while running. Every client animates the characters near it, which means animation costs no extra network traffic.
+
+**Turning them into real animations.** To hand-polish one in the Animation Editor:
+
+1. In Studio's **Edit mode**, open View → Command Bar and run:
+   ```lua
+   require(game.ServerScriptService.Server.Dev.AnimationExporter).run()
+   ```
+   This creates `PK_AnimRig` at the origin, holding every pose as a KeyframeSequence (`PK_Move_uppercut`, `PK_Emote_flex`, `PK_Stance`, ...).
+2. Avatar → **Animation Editor** → click the rig → `...` → **Load** → pick one. Edit it, then `...` → **Publish to Roblox**.
+3. Paste the id into that move or emote's `animationId` field as `"rbxassetid://<id>"`. The game then plays your published animation instead of the procedural one.
+
+**Custom walk/run/idle.** Put animation ids in `Animations.Movement` and `AnimationService` swaps them into every character's default `Animate` script.
+
+**Writing your own pose.** A pose is a `duration` plus keyframes `{ t = seconds, joints = { JointName = Vector3.new(x, y, z) } }`, in degrees. Joint names are `RightShoulder`, `LeftShoulder`, `RightElbow`, `LeftElbow`, `RightHip`, `LeftHip`, `RightKnee`, `LeftKnee`, `Waist` and `Neck`. The sign conventions are listed at the top of `Config/Animations`. Start and end on `{}` (rest) so the pose blends cleanly.
+
 ## Tuning cheatsheet
 
 - **Leveling speed:** `GameConfig.Progression.XpBase` / `XpExponent`, plus each target's `xpPerHit` / `koXp`.
@@ -111,7 +138,7 @@ Dev chat commands (Studio only): `!coins N`, `!level N`, `!xp N`, `!points N`, `
 
 ## Next steps (ideas)
 
-- Real animations: upload them and set each move's `animationId`.
+- Polish the exported animations in the Animation Editor and set their `animationId`s.
 - Sounds: swap the built-in ones in `GameConfig.Sounds` for your own.
 - Monetization: game passes (x2 coins, auto-punch) and developer products. These need a `MarketplaceService.ProcessReceipt` handler with idempotent receipt tracking.
 - Pets or companions, quests, and a timed boss event.

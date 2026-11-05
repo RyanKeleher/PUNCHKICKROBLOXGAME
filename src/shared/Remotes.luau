@@ -18,6 +18,7 @@ Remotes.Names = {
 	"EquipCosmetic", -- (category: string, cosmeticId: string)  "" unequips
 	"Rebirth", -- ()
 	"ClaimDaily", -- ()
+	"Emote", -- (emoteId: string)
 	"RequestSync", -- ()
 
 	-- server -> client
@@ -28,6 +29,7 @@ Remotes.Names = {
 	"Notify", -- (text: string, kind: string?)
 	"LevelUp", -- (newLevel: number)
 	"KoFeed", -- (attackerName: string, victimName: string)
+	"PoseFx", -- (character: Model, emoteId: string)
 }
 
 local cache: { [string]: RemoteEvent } = {}

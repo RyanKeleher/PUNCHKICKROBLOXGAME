@@ -29,6 +29,7 @@ local StatsService = require(script.Parent.StatsService)
 local TargetService = require(script.Parent.TargetService)
 local RagdollService = require(script.Parent.RagdollService)
 local ZoneService = require(script.Parent.ZoneService)
+local AnimationService = require(script.Parent.AnimationService)
 
 local FX_RADIUS = 220 -- only send visual effects to players this close
 local COOLDOWN_TOLERANCE = 0.85 -- accept slightly-early requests (network jitter)
@@ -286,6 +287,7 @@ local function onCharacterAdded(player: Player, character: Model)
 		for _, p in Players:GetPlayers() do
 			Remotes.get("KoFeed"):FireClient(p, killer.DisplayName, player.DisplayName)
 		end
+		AnimationService.celebrate(killer, "PlayerKO")
 	end)
 end
 

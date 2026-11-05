@@ -1,8 +1,9 @@
 -- Turns input into attack requests.
 --
---   PC          hold Left Click = punch · 1-4 or Q/E/R/F = move slots · M = menu
+--   PC          hold Left Click = punch · 1-4 or Q/E/R/F = move slots · M = menu · 5-8 = emotes
 --   Controller  hold R2 = punch · X / Y / B / R1 = move slots · Select or DPad Up = menu
---   Mobile      hold the PUNCH button · tap a move slot · MENU button
+--               DPad Down = emote panel
+--   Mobile      hold the PUNCH button · tap a move slot · MENU / EMOTE buttons
 --
 -- Client-side we check the cooldown too, but only to avoid sending requests
 -- that would be rejected and to drive the HUD overlay. The server keeps its
@@ -15,11 +16,13 @@ local UserInputService = game:GetService("UserInputService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Moves = require(Shared.Config.Moves)
+local Animations = require(Shared.Config.Animations)
 local Progression = require(Shared.Progression)
 local Remotes = require(Shared.Remotes)
 
 local ProfileState = require(script.Parent.ProfileState)
 local EffectsController = require(script.Parent.EffectsController)
+local PoseAnimator = require(script.Parent.PoseAnimator)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -52,6 +55,15 @@ local lastUse: { [string]: number } = {}
 local holding = { mouse = false, touch = false, pad = false }
 local punchVariant = 1
 local busyUntil = 0 -- small global lock so a big move's animation isn't cut by spam
+local lastEmote = 0
+local EMOTE_COOLDOWN = 1.5 -- matches the server's rate limit closely enough
+
+local EMOTE_KEYS: { [Enum.KeyCode]: string } = {}
+for _, emote in Animations.Emotes do
+	if emote.key then
+		EMOTE_KEYS[emote.key] = emote.id
+	end
+end
 
 local function getCharacter(): (Model?, BasePart?, Humanoid?)
 	local character = player.Character
@@ -135,6 +147,19 @@ local function tryMove(moveId: string?, slotIndex: number): boolean
 	return true
 end
 
+local function emote(emoteId: string)
+	local character = getCharacter()
+	local now = os.clock()
+	if not character or character:GetAttribute("Ragdolled") or now - lastEmote < EMOTE_COOLDOWN then
+		return
+	end
+	lastEmote = now
+	-- Play it ourselves right away, then let the server show everyone else.
+	if PoseAnimator.playEmote(character, emoteId) then
+		Remotes.get("Emote"):FireServer(emoteId)
+	end
+end
+
 local function useSlot(slotIndex: number)
 	local data = ProfileState.data
 	if not data then
@@ -159,6 +184,7 @@ function CombatController.start(hudInstance, menuInstance)
 	hud.MenuPressed:Connect(function()
 		menu:toggle()
 	end)
+	hud.EmotePressed:Connect(emote)
 
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -178,12 +204,21 @@ function CombatController.start(hudInstance, menuInstance)
 			end
 			return
 		end
+		if input.KeyCode == Enum.KeyCode.DPadDown then
+			hud:toggleEmotes()
+			return
+		end
 		if gameProcessed or menu.open then
 			return -- typing in chat, or navigating the menu
 		end
 		local slot = SLOT_KEYS[input.KeyCode]
 		if slot then
 			useSlot(slot)
+			return
+		end
+		local emoteId = EMOTE_KEYS[input.KeyCode]
+		if emoteId then
+			emote(emoteId)
 		end
 	end)
 

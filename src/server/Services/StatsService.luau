@@ -20,6 +20,7 @@ local Validate = require(Util.Validate)
 local DataService = require(script.Parent.DataService)
 local PlayerSync = require(script.Parent.PlayerSync)
 local CosmeticService = require(script.Parent.CosmeticService)
+local AnimationService = require(script.Parent.AnimationService)
 
 local StatsService = {}
 
@@ -80,6 +81,7 @@ function StatsService.addXp(player: Player, amount: number)
 	local gained = Progression.addXp(data, scaled)
 	if gained > 0 then
 		Remotes.get("LevelUp"):FireClient(player, data.level)
+		AnimationService.celebrate(player, "LevelUp")
 		notify(player, `LEVEL {data.level}! +{gained * GameConfig.Progression.StatPointsPerLevel} stat points`, "level")
 		StatsService.applyCharacter(player)
 		CosmeticService.refreshTag(player)

@@ -10,6 +10,8 @@ local Targets = require(Shared.Config.Targets)
 local Zones = require(Shared.Config.Zones)
 local Cosmetics = require(Shared.Config.Cosmetics)
 local Format = require(Shared.Util.Format)
+local Animations = require(Shared.Config.Animations)
+local PoseMath = require(Shared.PoseMath)
 
 local Tests = {}
 
@@ -123,6 +125,49 @@ local cases = {
 				assert(a.center.X == b.center.X or a.center.Z == b.center.Z, `bridge {pair[1]}-{pair[2]} must be axis-aligned`)
 			end
 			assert(#Cosmetics.list > 0)
+		end,
+	},
+	{
+		"animation poses only use known joints and valid timings",
+		function()
+			local function checkPose(name: string, pose)
+				assert(pose.duration > 0, name .. ": duration must be > 0")
+				local last = -1
+				for _, frame in pose.frames do
+					assert(frame.t >= last, name .. ": keyframes must be in time order")
+					assert(frame.t <= pose.duration + 1e-6, name .. ": keyframe after the end")
+					last = frame.t
+				end
+				for joint in PoseMath.jointSet(pose) do
+					assert(PoseMath.R15_PARTS[joint], `{name}: unknown joint {joint}`)
+				end
+			end
+			for _, move in Moves.list do
+				checkPose(move.id, move.pose)
+				if move.poseAlt then
+					checkPose(move.id .. " (alt)", move.poseAlt)
+				end
+			end
+			checkPose("HitReact", Animations.HitReact.pose)
+			local keys = {}
+			for _, emote in Animations.Emotes do
+				checkPose("emote " .. emote.id, emote.pose)
+				if emote.key then
+					assert(not keys[emote.key], "two emotes share key " .. emote.key.Name)
+					keys[emote.key] = true
+				end
+			end
+			for joint in Animations.Stance.joints do
+				assert(PoseMath.R15_PARTS[joint], "stance: unknown joint " .. joint)
+			end
+			for reason, emoteId in Animations.Auto do
+				assert(Animations.EmotesById[emoteId], `Auto.{reason} uses unknown emote {emoteId}`)
+			end
+			-- Sampling: start of a pose is its first frame, and it ends at rest.
+			local punch = Moves.byId.punch.pose
+			assert(PoseMath.sample(punch, 0, "RightShoulder") == Vector3.zero)
+			assert(PoseMath.sample(punch, punch.duration, "RightShoulder") == Vector3.zero)
+			assert(PoseMath.sample(punch, 0.07, "RightShoulder").X > 90)
 		end,
 	},
 }

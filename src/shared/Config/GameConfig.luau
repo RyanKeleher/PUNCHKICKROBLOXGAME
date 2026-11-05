@@ -112,6 +112,7 @@ GameConfig.RateLimits = {
 	EquipCosmetic = { rate = 6, burst = 10 },
 	Rebirth = { rate = 0.5, burst = 2 },
 	ClaimDaily = { rate = 0.5, burst = 2 },
+	Emote = { rate = 0.7, burst = 2 },
 	RequestSync = { rate = 0.5, burst = 3 },
 }
 

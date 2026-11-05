@@ -357,8 +357,24 @@ function EffectsController.start()
 		EffectsController.damageNumber(position, damage, isKo == true, color)
 		EffectsController.spark(position, color, if isKo then 40 else 14)
 		EffectsController.playSound(GameConfig.Sounds.Hit, position, if isKo then 0.9 else 0.5, if isKo then 0.8 else 1.15)
-		if typeof(target) == "Instance" and target:IsA("Model") and target:GetAttribute("TargetId") and not isKo then
-			wobble(target, math.clamp(4 + damage / 12, 4, 14))
+		if typeof(target) == "Instance" and target:IsA("Model") then
+			if target:GetAttribute("TargetId") and not isKo then
+				wobble(target, math.clamp(4 + damage / 12, 4, 14))
+			elseif target:FindFirstChildOfClass("Humanoid") then
+				-- A player got hit: flinch (and raise their guard).
+				PoseAnimator.playHitReact(target)
+			end
+		end
+	end)
+
+	-- Emotes and automatic celebrations (level up, PvP KO) from the server.
+	Remotes.get("PoseFx").OnClientEvent:Connect(function(character, emoteId)
+		if typeof(character) ~= "Instance" or not character:IsA("Model") or type(emoteId) ~= "string" then
+			return
+		end
+		local root = character:FindFirstChild("HumanoidRootPart")
+		if root and root:IsA("BasePart") and nearCamera(root.Position) then
+			PoseAnimator.playEmote(character, emoteId)
 		end
 	end)
 
